@@ -5,7 +5,7 @@ const FONT_SOURCE = 'gstatic';
 const CSS_SOURCE  = 'googleapis';
 const DEFAULT_TARGET_FOLDER = 'plugins';
 const BASE_BASE_PATH = '';
-const DOWNLOAD_BASE_PATH = 'wp-content/gfontreplacer/font-cache';
+const DOWNLOAD_BASE_PATH = 'gfontreplacer/font-cache';
 
 const GOOLGEAPI_PATTERN = '#(https?:)?//fonts\.(googleapis)\.com/css2?\?family=([\w\s\+:@]+)#i';
 const GSTATIC_PATTERN = '#(https?:)?//fonts\.(gstatic)\.com/s/([\w\s\+\-]+)/[\w\s\+\-]+/[\w\s\+\\-:]+\.[\w]+#i';
@@ -29,17 +29,17 @@ preg_replace_callback(URL_IN_CSS_PATTERN, function ($matches) {
 exit();
 */
 
-const DEBUG_ON = true; // set to false this to make it write
-
 if (!isset($argv[1])) {
-    echo "Bitte base URL angeben! (z.B. https://mydomain.com)\n";
+    echo "Please provide the base URL! (like https://mydomain.com)\n";
     exit(1);
 }
 
 $baseUrl      = $argv[1];
 $targetFolder = $argv[2] ?? DEFAULT_TARGET_FOLDER;
-$downloadBasePath = $argv[3] ?? DOWNLOAD_BASE_PATH;
-$baseBasePath = $argv[4] ?? BASE_BASE_PATH;
+$extensions = explode(',', $argv[3]) ?? ['php', 'js', 'css'];
+$downloadBasePath = $argv[4] ?? DOWNLOAD_BASE_PATH;
+$baseBasePath = $argv[5] ?? BASE_BASE_PATH;
+$isDebug = $argv[6] ?? false;
 
 
 function searchFilesByExt(string $targetFolder, array $extensions): \Generator {
@@ -134,7 +134,7 @@ function getTargetUrl(string $url, string $type, string $baseUrl, string $downlo
     return $baseUrl . '/' . $downloadBasePath . '/' . $name;
 }
 
-function downloadFont(string $url, string $targetPath): bool {
+function downloadFont(string $url, string $targetPath, bool $isDebug): bool {
     $resource = curl_init();
 
     curl_setopt($resource, CURLOPT_URL, $url);
@@ -150,7 +150,7 @@ function downloadFont(string $url, string $targetPath): bool {
         return false;
     }
 
-    if (DEBUG_ON) {
+    if ($isDebug) {
         echo "downloaded file '" . $url . "'";
     }
 
@@ -185,7 +185,7 @@ function getFromMatchByIndex(array $matches, int $index): string {
 }
 
 
-function replaceInCss(string $sourceFilePath, $baseUrl, $downloadBasePath, $baseBasePath, &$modifiedFiles): void {
+function replaceInCss(string $sourceFilePath, string $baseUrl, string $downloadBasePath,  string $baseBasePath, array &$modifiedFiles, bool $isDebug): void {
     $content = file_get_contents($sourceFilePath);
 
     preg_match_all(URL_IN_CSS_PATTERN, $content, $matches);
@@ -217,37 +217,37 @@ function replaceInCss(string $sourceFilePath, $baseUrl, $downloadBasePath, $base
             }
 
             $targetFilePath = getTargetPath($downloadBasePath, $baseBasePath, $url, $type);
-            downloadFont($url, $targetFilePath);
+            downloadFont($url, $targetFilePath, $isDebug);
             $newUrl = getTargetUrl($url, $type, $baseUrl, $downloadBasePath);
 
-            if (DEBUG_ON) {
+            if ($isDebug) {
                 echo "REPLACEMENT in css: $url with $newUrl\n";
             }
 
             updateModifiedFilesList($font, $url, $sourceFilePath, $modifiedFiles);
-            if (!DEBUG_ON) {
+            if (!$isDebug) {
                 if (!file_exists($sourceFilePath . BACKUP_SUFFIX)) {
                     copy($sourceFilePath, $sourceFilePath . BACKUP_SUFFIX);
                 }
                 file_put_contents($sourceFilePath, str_replace($url, $newUrl, $content));
             }
-            replaceFontAsLocal($targetFilePath, $modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath);
+            replaceFontAsLocal($targetFilePath, $modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath, $isDebug);
         }
     }
 }
 
-function replaceFontsAsLocal(\Generator $files, string $baseUrl, string $downloadBasePath, string $baseBasePath = '') : array {
+function replaceFontsAsLocal(\Generator $files, string $baseUrl, string $downloadBasePath, bool $isDebug, string $baseBasePath = '') : array {
     $modifiedFiles = [];
     foreach ($files as $file) {
-        replaceFontAsLocal($file, $modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath);
+        replaceFontAsLocal($file, $modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath, $isDebug);
     }
 
     return $modifiedFiles;
 }
 
-function replaceFontAsLocal($file, array &$modifiedFiles, string $baseUrl, string $downloadBasePath, string $baseBasePath): void {
+function replaceFontAsLocal($file, array &$modifiedFiles, string $baseUrl, string $downloadBasePath, string $baseBasePath, bool $isDebug): void {
     try {
-        $matchCallback = static function ($matches) use ($file, &$modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath) {
+        $matchCallback = static function ($matches) use ($isDebug, $file, &$modifiedFiles, $baseUrl, $downloadBasePath, $baseBasePath) {
             $url = getFromMatchByIndex($matches, 0);
             $schema = getFromMatchByIndex($matches, 1);
             $type = getFromMatchByIndex($matches, 2);
@@ -261,26 +261,26 @@ function replaceFontAsLocal($file, array &$modifiedFiles, string $baseUrl, strin
 
             // skip downloading if we already have the file
             if (!is_file($targetPath)) {
-                downloadFont($url, $targetPath);
+                downloadFont($url, $targetPath, $isDebug);
             }
 
             updateModifiedFilesList($font, $url, $file, $modifiedFiles);
 
             if ($type === CSS_SOURCE) {
-                replaceInCss($targetPath, $baseUrl, $downloadBasePath, $baseBasePath, $modifiedFiles);
+                replaceInCss($targetPath, $baseUrl, $downloadBasePath, $baseBasePath, $modifiedFiles, $isDebug);
             }
 
-            if (DEBUG_ON) {
+            if ($isDebug) {
                 echo 'REPLACEMENT: ' . getTargetUrl($url, $type, $baseUrl, $downloadBasePath) . "\n";
             }
-            if (!DEBUG_ON) {
+            if (!$isDebug) {
                 return getTargetUrl($url, $type, $baseUrl, $downloadBasePath);
             }
         };
 
         $content = @file_get_contents($file);
         $newContent = preg_replace_callback([GOOLGEAPI_PATTERN, GSTATIC_PATTERN], $matchCallback, $content);
-        if (!DEBUG_ON) {
+        if (!$isDebug) {
             if (!file_exists($file . BACKUP_SUFFIX)) {
                 copy($file, $file . BACKUP_SUFFIX);
             }
@@ -313,25 +313,16 @@ function getStats(array $modified): array {
     ];
 }
 
-/*
- * targets:
- * 1. get all usages of google fonts
- * 2. replace all usages of google fonts with local version
- *   2.1. get the full link to font file or css file
- *   2.2. download the font or css and font files to local folder
- *   2.3. test if downloaded files work and can be reached via URL
- *   2.4. replace the urls in files to point to local folder
- * 3. make this part of the mills deployment (scripts)
- * 4. call the script via cron once a day
- * 5. create a plugin with this code
- */
-
-$files = searchFilesByExt($targetFolder, ['php', 'js', 'css']);
+$files         = searchFilesByExt($targetFolder, $extensions);
 $filteredFiles = searchFileListBy($files, ['fonts\.gstatic\.com', 'fonts\.googleapis\.com'], $downloadBasePath);
 
-$modified = replaceFontsAsLocal($filteredFiles, $baseUrl, $downloadBasePath, $baseBasePath);
+$modified = replaceFontsAsLocal($filteredFiles, $baseUrl, $downloadBasePath, $baseBasePath, $isDebug);
 $stats    = getStats($modified);
-file_put_contents(date('Y-m-d-His') . '_gfontreplacer_last_run_stat.ser', serialize($stats));
+
+if (!$isDebug) {
+    file_put_contents(date('Y-m-d-His') . '_gfontreplacer_last_run_stat.ser', serialize($stats));
+}
+
 print_r($stats);
 
 // todo: create log file with what has been done
