@@ -115,7 +115,7 @@ function getTargetPath(string $downloadBasePath, string $baseBasePath, string $u
         $downloadBasePath = $baseBasePath . '/' . $downloadBasePath;
     }
 
-    if ($_ENV['PWD']) {
+    if (isset($_ENV['PWD'])) {
         $downloadBasePath = $_ENV['PWD'] . '/' . $downloadBasePath;
     }
 
