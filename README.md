@@ -13,4 +13,4 @@
 # USAGE
 1. copy the script somewhere you know (i.e. `~/bin` or the application's webroot)
 2. `chmod +x gfontreplacer.php` 
-3. execution with at least first parameter (the BaseURL). like `php gfontreplacer.php 'https://mywebsite.com` or `php gfontreplacer.php 'https://mywebsite.com' plugins 'uploads/font-cache' public`
+3. execution with at least first parameter (the BaseURL). like `php gfontreplacer.php 'https://mywebsite.com` or `php gfontreplacer.php 'https://mywebsite.com' plugins 'uploads/font-cache' 'js,css,php' 'uploads/cache' '' 1` 

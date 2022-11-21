@@ -41,6 +41,9 @@ $downloadBasePath = $argv[4] ?? DOWNLOAD_BASE_PATH;
 $baseBasePath = $argv[5] ?? BASE_BASE_PATH;
 $isDebug = $argv[6] ?? false;
 
+if ($isDebug) {
+    echo "NOW in dry mode. No changes will be saved!\r\n";
+}
 
 function searchFilesByExt(string $targetFolder, array $extensions): \Generator {
     if (isset($_ENV['PWD'])) {
